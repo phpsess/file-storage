@@ -32,7 +32,7 @@
   "scripts": {
     "fix": "phpcbf src",
 
-    "build": "composer test && composer phpstan && composer phpmd",
+    "build": "composer test && composer phpstan && composer phpmd && composer phpcs",
 
     "test": "phpunit",
     "phpstan": "phpstan analyse",
