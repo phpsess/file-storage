@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpsess/session-handler.git",
-                "reference": "ec84ab6fc6e9782c86df3bc3ac56cd60bd541f1b"
+                "reference": "e8d68a2df6790324ae34c0c99d5535d4cfab4ce6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpsess/session-handler/zipball/ec84ab6fc6e9782c86df3bc3ac56cd60bd541f1b",
-                "reference": "ec84ab6fc6e9782c86df3bc3ac56cd60bd541f1b",
+                "url": "https://api.github.com/repos/phpsess/session-handler/zipball/e8d68a2df6790324ae34c0c99d5535d4cfab4ce6",
+                "reference": "e8d68a2df6790324ae34c0c99d5535d4cfab4ce6",
                 "shasum": ""
             },
             "require": {
@@ -49,7 +49,7 @@
                 }
             ],
             "description": "A security-first PHP session handler",
-            "time": "2018-10-13T19:08:01+00:00"
+            "time": "2018-10-13T19:47:26+00:00"
         }
     ],
     "packages-dev": [

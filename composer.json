@@ -19,7 +19,7 @@
   ],
   "autoload": {
     "psr-4": {
-      "PHPSess\\Storage\\FileStorage\\": "src/"
+      "PHPSess\\Storage\\": "src/"
     }
   },
   "require-dev": {
@@ -32,7 +32,7 @@
   "scripts": {
     "fix": "phpcbf src",
 
-    "build": "composer test && composer phpstan && composer phpmd && composer phpcs",
+    "build": "composer test && composer phpstan && composer phpmd",
 
     "test": "phpunit",
     "phpstan": "phpstan analyse",

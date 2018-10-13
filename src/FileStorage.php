@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PHPSess\Storage;
 
+use PHPSess\Interfaces\StorageInterface;
 use PHPSess\Exception\DirectoryNotReadableException;
 use PHPSess\Exception\DirectoryNotWritableException;
 use PHPSess\Exception\SessionNotFoundException;
