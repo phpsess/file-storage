@@ -12,6 +12,8 @@ use PHPSess\Exception\UnableToCreateDirectoryException;
 use PHPSess\Exception\UnableToDeleteException;
 use PHPSess\Exception\UnableToFetchException;
 use PHPSess\Exception\UnableToSaveException;
+use TH\Lock\FileLock;
+use Exception;
 
 /**
  * Uses the filesystem to store the session data.
@@ -31,6 +33,11 @@ class FileStorage implements StorageInterface
      * @var string $filePath The absolute path where the session files are saved.
      */
     private $filePath;
+
+    /**
+     * @var FileLock[] $locks The locks to the session files
+     */
+    private static $locks;
 
     /**
      * FileStorage constructor.
@@ -118,6 +125,58 @@ class FileStorage implements StorageInterface
         }
 
         return $data->data;
+    }
+
+    /**
+     * Asks the drive to lock the session storage
+     *
+     * @param string $sessionIdentifier The session identifier to be locked
+     * @return bool Whether the session could be locked or not
+     */
+    public function lock(string $sessionIdentifier): bool
+    {
+        $lock = $this->getLock($sessionIdentifier);
+
+        try {
+            $lock->acquire();
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Asks the drive to unlock the session storage
+     *
+     * @param string $sessionIdentifier The session identifier to be unlocked
+     * @return void
+     */
+    public function unlock(string $sessionIdentifier): void
+    {
+        $lock = $this->getLock($sessionIdentifier);
+
+        try {
+            $lock->release();
+        } catch (Exception $e) {
+        }
+    }
+
+    /**
+     * Gets the lock to the session file.
+     *
+     * If the lock don't exist, creates it.
+     *
+     * @param string $sessionIdentifier The session identifier
+     * @return FileLock
+     */
+    private function getLock(string $sessionIdentifier): FileLock
+    {
+        if (!isset(self::$locks[$sessionIdentifier])) {
+            $fileName = $this->getFileName($sessionIdentifier);
+            self::$locks[$sessionIdentifier] = new FileLock($fileName);
+        }
+
+        return self::$locks[$sessionIdentifier];
     }
 
     /**

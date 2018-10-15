@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PHPSess\Tests;
 
+use PHPSess\Exception\UnableToFetchException;
 use PHPSess\Storage\FileStorage;
 use PHPSess\Exception\SessionNotFoundException;
 use PHPSess\Exception\DirectoryNotWritableException;
@@ -11,6 +12,9 @@ use PHPSess\Exception\DirectoryNotReadableException;
 use PHPSess\Exception\UnableToSaveException;
 use PHPSess\Exception\UnableToDeleteException;
 use PHPSess\Exception\UnableToCreateDirectoryException;
+
+use Exception;
+use ReflectionClass;
 
 use PHPUnit\Framework\TestCase;
 use org\bovigo\vfs\vfsStream;
@@ -21,13 +25,17 @@ use org\bovigo\vfs\vfsStream;
 final class FileStorageTest extends TestCase
 {
 
+    private const UNWRITABLE = 0444;
+
+    private const UNREADABLE = 0222;
+
     public function setUp()
     {
         $path = vfsStream::setup('root', 0777, ['session' => []])->url();
 
         try {
-            $reflection = new \ReflectionClass(self::class);
-        } catch (\Exception $exception) {
+            $reflection = new ReflectionClass(self::class);
+        } catch (Exception $exception) {
             $this->fail('Not able to determine the test class name');
             return;
         }
@@ -43,41 +51,138 @@ final class FileStorageTest extends TestCase
         parent::setUp();
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::__construct
+     */
     public function testUnwritableDirectory()
     {
         $session_path = session_save_path();
 
-        mkdir($session_path, 0444);
+        mkdir($session_path, self::UNWRITABLE);
 
         $this->expectException(DirectoryNotWritableException::class);
 
         new FileStorage();
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::__construct
+     */
     public function testUnreadableDirectory()
     {
         $session_path = session_save_path();
 
-        mkdir($session_path, 0222);
+        mkdir($session_path, self::UNREADABLE);
 
         $this->expectException(DirectoryNotReadableException::class);
 
         new FileStorage();
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::__construct
+     */
+    public function testCantFigureOutPath()
+    {
+        ini_set('session.save_path', '');
+
+        $this->expectException(UnableToCreateDirectoryException::class);
+
+        new FileStorage();
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::__construct
+     */
+    public function testNoPermissionToCreatePath()
+    {
+        $path = ini_get('session.save_path');
+
+        $forbiddenPath = "$path/forbidden";
+
+        mkdir($forbiddenPath, self::UNWRITABLE);
+
+        $sessionPath = "$forbiddenPath/sessions";
+
+        $this->expectException(UnableToCreateDirectoryException::class);
+
+        new FileStorage($sessionPath);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::__construct
+     */
+    public function testNoErrorThrownIncontroller()
+    {
+        $exception = null;
+        try {
+            new FileStorage();
+        } catch (Exception $exception) {
+        }
+
+        $this->assertNull($exception);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::get
+     * @covers \PHPSess\Storage\FileStorage::getFileName
+     */
+    public function testThrowErrorWhenCantGetSessionFile()
+    {
+        $storage = new FileStorage('', 'ssess_');
+
+        $identifier = $this->getName();
+
+        $storage->save($identifier, 'data');
+
+        $session_path = session_save_path();
+
+        chmod("$session_path/ssess_$identifier", self::UNREADABLE);
+
+        $this->expectException(UnableToFetchException::class);
+
+        $storage->get($identifier);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::get
+     */
+    public function testThrowErrorWhenTheFileIsCorrupted()
+    {
+        $storage = new FileStorage('', 'ssess_');
+
+        $identifier = $this->getName();
+
+        $storage->save($identifier, 'data');
+
+        $session_path = session_save_path();
+
+        file_put_contents("$session_path/ssess_$identifier", '{corrupted: json"');
+
+        $this->expectException(UnableToFetchException::class);
+
+        $storage->get($identifier);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::save
+     */
     public function testUnableToSave()
     {
         $session_path = session_save_path();
 
         $file_storage = new FileStorage();
 
-        chmod($session_path, 0444);
+        chmod($session_path, self::UNWRITABLE);
 
         $this->expectException(UnableToSaveException::class);
 
         $file_storage->save('aSessionIdentifier', 'someData');
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::destroy
+     */
     public function testUnableToDestroy()
     {
         $session_path = session_save_path();
@@ -95,6 +200,24 @@ final class FileStorageTest extends TestCase
         $file_storage->destroy($identifier);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::destroy
+     */
+    public function testThrowErrorDestroyingInexistentSession()
+    {
+        $file_storage = new FileStorage();
+
+        $identifier = $this->getName();
+
+        $this->expectException(SessionNotFoundException::class);
+
+        $file_storage->destroy($identifier);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::save
+     * @covers \PHPSess\Storage\FileStorage::get
+     */
     public function testSaveThenGet()
     {
         $file_storage = new FileStorage();
@@ -110,6 +233,9 @@ final class FileStorageTest extends TestCase
         $this->assertEquals($data, $saved_data);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::get
+     */
     public function testGetWithDifferentInstance()
     {
         $file_storage = new FileStorage();
@@ -127,6 +253,9 @@ final class FileStorageTest extends TestCase
         $this->assertEquals($data, $saved_data);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::get
+     */
     public function testGetInexistent()
     {
         $file_storage = new FileStorage();
@@ -138,6 +267,9 @@ final class FileStorageTest extends TestCase
         $file_storage->get($identifier);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::sessionExists
+     */
     public function testExists()
     {
         $file_storage = new FileStorage();
@@ -155,6 +287,9 @@ final class FileStorageTest extends TestCase
         $this->assertTrue($exists);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::destroy
+     */
     public function testDestroy()
     {
         $file_storage = new FileStorage();
@@ -174,6 +309,10 @@ final class FileStorageTest extends TestCase
         $this->assertFalse($exists);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
+     */
     public function testClearOld()
     {
         $file_storage = new FileStorage();
@@ -195,6 +334,10 @@ final class FileStorageTest extends TestCase
         $this->assertFalse($exists);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
+     */
     public function testDoNotClearNew()
     {
         $file_storage = new FileStorage();
@@ -214,30 +357,31 @@ final class FileStorageTest extends TestCase
         $this->assertTrue($exists);
     }
 
-    public function testCantFigureOutPath()
-    {
-        ini_set('session.save_path', '');
-
-        $this->expectException(UnableToCreateDirectoryException::class);
-
-        new FileStorage();
-    }
-
-    public function testNoPermissionToCreatePath()
+    /**
+     * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
+     */
+    public function testNoPermissionToScanToClear()
     {
         $path = ini_get('session.save_path');
 
-        $forbiddenPath = "$path/forbidden";
+        $fileStorage = new FileStorage();
 
-        mkdir($forbiddenPath, 0444);
+        $identifier = $this->getName();
 
-        $sessionPath = "$forbiddenPath/sessions";
+        $fileStorage->save($identifier, 'test data');
 
-        $this->expectException(UnableToCreateDirectoryException::class);
+        chmod($path, self::UNWRITABLE);
 
-        new FileStorage($sessionPath);
+        $this->expectException(UnableToDeleteException::class);
+
+        $fileStorage->clearOld(0);
     }
 
+    /**
+     * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
+     */
     public function testNoPermissionToClear()
     {
         $path = ini_get('session.save_path');
@@ -249,5 +393,139 @@ final class FileStorageTest extends TestCase
         $this->expectException(UnableToDeleteException::class);
 
         $fileStorage->clearOld(0);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
+     */
+    public function testNoPermissionToReadFileWhenClearing()
+    {
+        $path = ini_get('session.save_path');
+
+        $fileStorage = new FileStorage('', 'ssess_');
+
+        $identifier = $this->getName();
+
+        $fileStorage->save($identifier, 'test data');
+
+        chmod("$path/ssess_$identifier", self::UNREADABLE);
+
+        $this->expectException(UnableToDeleteException::class);
+
+        $fileStorage->clearOld(0);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
+     */
+    public function testDoNotTryToClearDirectory()
+    {
+        $path = ini_get('session.save_path');
+
+        $fileStorage = new FileStorage('', 'ssess_');
+
+        mkdir("$path/ssess_random_dir");
+
+        $exception = null;
+        try {
+            $fileStorage->clearOld(0);
+        } catch (Exception $exception) {
+        }
+
+        $this->assertNull($exception);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::lock
+     * @covers \PHPSess\Storage\FileStorage::getLock
+     */
+    public function testCanLockOnce()
+    {
+        $storage = new FileStorage();
+
+        $identifier = $this->getName();
+
+        $locked = $storage->lock($identifier);
+
+        $this->assertTrue($locked);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::lock
+     * @covers \PHPSess\Storage\FileStorage::getLock
+     */
+    public function testLockingTwiceIsOk()
+    {
+        $storage = new FileStorage();
+
+        $identifier = $this->getName();
+
+        $storage->lock($identifier);
+
+        $locked = $storage->lock($identifier);
+
+        $this->assertTrue($locked);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::lock
+     * @covers \PHPSess\Storage\FileStorage::unlock
+     * @covers \PHPSess\Storage\FileStorage::getLock
+     */
+    public function testCanLockUnlockAndLockAgain()
+    {
+        $storage = new FileStorage();
+
+        $identifier = $this->getName();
+
+        $storage->lock($identifier);
+
+        $storage->unlock($identifier);
+
+        $locked = $storage->lock($identifier);
+
+        $this->assertTrue($locked);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::unlock
+     * @covers \PHPSess\Storage\FileStorage::getLock
+     */
+    public function testUnlockInexistentThrowNoErrors()
+    {
+        $storage = new FileStorage();
+
+        $identifier = $this->getName();
+
+        $exception = null;
+        try {
+            $storage->unlock($identifier);
+        } catch (Exception $exception) {
+        }
+
+        $this->assertNull($exception);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::lock
+     * @covers \PHPSess\Storage\FileStorage::getLock
+     */
+    public function testCantLockUnreadableDirectory()
+    {
+        $storage = new FileStorage('', 'ssess_');
+
+        $identifier = $this->getName();
+
+        $storage->save($identifier, 'data');
+
+        $save_path = ini_get('session.save_path');
+
+        chmod("$save_path/ssess_$identifier", self::UNREADABLE);
+
+        $locked = $storage->lock($identifier);
+
+        $this->assertFalse($locked);
     }
 }
