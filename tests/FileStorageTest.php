@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace PHPSess\Tests;
 
+use PHPSess\Exception\BadSessionContentException;
 use PHPSess\Exception\UnableToFetchException;
+use PHPSess\Exception\UnableToSetupStorageException;
 use PHPSess\Storage\FileStorage;
 use PHPSess\Exception\SessionNotFoundException;
-use PHPSess\Exception\DirectoryNotWritableException;
-use PHPSess\Exception\DirectoryNotReadableException;
 use PHPSess\Exception\UnableToSaveException;
 use PHPSess\Exception\UnableToDeleteException;
-use PHPSess\Exception\UnableToCreateDirectoryException;
 
 use Exception;
 use ReflectionClass;
@@ -60,7 +59,7 @@ final class FileStorageTest extends TestCase
 
         mkdir($session_path, self::UNWRITABLE);
 
-        $this->expectException(DirectoryNotWritableException::class);
+        $this->expectException(UnableToSetupStorageException::class);
 
         new FileStorage();
     }
@@ -74,7 +73,7 @@ final class FileStorageTest extends TestCase
 
         mkdir($session_path, self::UNREADABLE);
 
-        $this->expectException(DirectoryNotReadableException::class);
+        $this->expectException(UnableToSetupStorageException::class);
 
         new FileStorage();
     }
@@ -86,7 +85,7 @@ final class FileStorageTest extends TestCase
     {
         ini_set('session.save_path', '');
 
-        $this->expectException(UnableToCreateDirectoryException::class);
+        $this->expectException(UnableToSetupStorageException::class);
 
         new FileStorage();
     }
@@ -104,7 +103,7 @@ final class FileStorageTest extends TestCase
 
         $sessionPath = "$forbiddenPath/sessions";
 
-        $this->expectException(UnableToCreateDirectoryException::class);
+        $this->expectException(UnableToSetupStorageException::class);
 
         new FileStorage($sessionPath);
     }
@@ -146,8 +145,9 @@ final class FileStorageTest extends TestCase
 
     /**
      * @covers \PHPSess\Storage\FileStorage::get
+     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
      */
-    public function testThrowErrorWhenTheFileIsCorrupted()
+    public function testThrowErrorWhenTheFileIsNoJson()
     {
         $storage = new FileStorage('', 'ssess_');
 
@@ -159,7 +159,70 @@ final class FileStorageTest extends TestCase
 
         file_put_contents("$session_path/ssess_$identifier", '{corrupted: json"');
 
-        $this->expectException(UnableToFetchException::class);
+        $this->expectException(BadSessionContentException::class);
+
+        $storage->get($identifier);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::get
+     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
+     */
+    public function testThrowErrorWhenTheFileHasNoDataField()
+    {
+        $storage = new FileStorage('', 'ssess_');
+
+        $identifier = $this->getName();
+
+        $storage->save($identifier, 'data');
+
+        $session_path = session_save_path();
+
+        file_put_contents("$session_path/ssess_$identifier", '{"time": 1}');
+
+        $this->expectException(BadSessionContentException::class);
+
+        $storage->get($identifier);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::get
+     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
+     */
+    public function testThrowErrorWhenTheFileHasNoTimeField()
+    {
+        $storage = new FileStorage('', 'ssess_');
+
+        $identifier = $this->getName();
+
+        $storage->save($identifier, 'data');
+
+        $session_path = session_save_path();
+
+        file_put_contents("$session_path/ssess_$identifier", '{"data": "test data"}');
+
+        $this->expectException(BadSessionContentException::class);
+
+        $storage->get($identifier);
+    }
+
+    /**
+     * @covers \PHPSess\Storage\FileStorage::get
+     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
+     */
+    public function testThrowErrorWhenTheFileHasTimeButIsNotMicrosecond()
+    {
+        $storage = new FileStorage('', 'ssess_');
+
+        $identifier = $this->getName();
+
+        $storage->save($identifier, 'data');
+
+        $session_path = session_save_path();
+
+        file_put_contents("$session_path/ssess_$identifier", '{"data": "test data", "time": "18:32:45"}');
+
+        $this->expectException(BadSessionContentException::class);
 
         $storage->get($identifier);
     }
@@ -217,6 +280,7 @@ final class FileStorageTest extends TestCase
     /**
      * @covers \PHPSess\Storage\FileStorage::save
      * @covers \PHPSess\Storage\FileStorage::get
+     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
      */
     public function testSaveThenGet()
     {
@@ -390,7 +454,7 @@ final class FileStorageTest extends TestCase
 
         chmod($path, 0111);
 
-        $this->expectException(UnableToDeleteException::class);
+        $this->expectException(UnableToFetchException::class);
 
         $fileStorage->clearOld(0);
     }
@@ -411,7 +475,7 @@ final class FileStorageTest extends TestCase
 
         chmod("$path/ssess_$identifier", self::UNREADABLE);
 
-        $this->expectException(UnableToDeleteException::class);
+        $this->expectException(UnableToFetchException::class);
 
         $fileStorage->clearOld(0);
     }

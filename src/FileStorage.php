@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace PHPSess\Storage;
 
+use PHPSess\Exception\BadSessionContentException;
+use PHPSess\Exception\UnableToSetupStorageException;
 use PHPSess\Interfaces\StorageInterface;
-use PHPSess\Exception\DirectoryNotReadableException;
-use PHPSess\Exception\DirectoryNotWritableException;
 use PHPSess\Exception\SessionNotFoundException;
-use PHPSess\Exception\UnableToCreateDirectoryException;
 use PHPSess\Exception\UnableToDeleteException;
 use PHPSess\Exception\UnableToFetchException;
 use PHPSess\Exception\UnableToSaveException;
 use TH\Lock\FileLock;
 use Exception;
+use stdClass;
 
 /**
  * Uses the filesystem to store the session data.
@@ -42,9 +42,7 @@ class FileStorage implements StorageInterface
     /**
      * FileStorage constructor.
      *
-     * @throws DirectoryNotReadableException
-     * @throws DirectoryNotWritableException
-     * @throws UnableToCreateDirectoryException
+     * @throws UnableToSetupStorageException
      * @param  string|null $filePath   The absolute path to the session files directory. If not set, defaults to INI session.save_path.
      * @param  string      $filePrefix The prefix used in the session file name.
      */
@@ -55,19 +53,24 @@ class FileStorage implements StorageInterface
         }
 
         if (!$filePath) {
-            throw new UnableToCreateDirectoryException();
+            $errorMessage = 'The session path could not be determined. Either pass it as the first ' .
+                'parameter to the Storage Driver constructor or define it in the ini setting session.save_path.';
+            throw new UnableToSetupStorageException($errorMessage);
         }
 
         if (!file_exists($filePath) && !@mkdir($filePath, 0777)) {
-            throw new UnableToCreateDirectoryException();
+            $errorMessage = 'The session path does not exist and could not be created. This may be a permission issue.';
+            throw new UnableToSetupStorageException($errorMessage);
         }
 
         if (!is_readable($filePath)) {
-            throw new DirectoryNotReadableException();
+            $errorMessage = 'The session path is not readable. This is likely a permission issue.';
+            throw new UnableToSetupStorageException($errorMessage);
         }
 
         if (!is_writable($filePath)) {
-            throw new DirectoryNotWritableException();
+            $errorMessage = 'The session path is not writable. This is likely a permission issue.';
+            throw new UnableToSetupStorageException($errorMessage);
         }
 
         $this->filePath = $filePath;
@@ -77,7 +80,7 @@ class FileStorage implements StorageInterface
     /**
      * Saves the encrypted session data to the storage.
      *
-     * @throws \PHPSess\Exception\UnableToSaveException
+     * @throws UnableToSaveException
      * @param  string $sessionIdentifier The string used to identify the session data.
      * @param  string $sessionData       The encrypted session data.
      * @return void
@@ -92,15 +95,17 @@ class FileStorage implements StorageInterface
         ]);
 
         if (@file_put_contents($fileName, $contents) === false) {
-            throw new UnableToSaveException();
+            $errorMessage = 'Unable to save the session file to the file-system. This may be a permission issue.';
+            throw new UnableToSaveException($errorMessage);
         }
     }
 
     /**
      * Fetches the encrypted session data based on the session identifier.
      *
-     * @throws \PHPSess\Exception\SessionNotFoundException
-     * @throws \PHPSess\Exception\UnableToFetchException
+     * @throws SessionNotFoundException
+     * @throws UnableToFetchException
+     * @throws BadSessionContentException
      * @param  string $sessionIdentifier The session identifier
      * @return string The encrypted session data
      */
@@ -112,19 +117,15 @@ class FileStorage implements StorageInterface
             throw new SessionNotFoundException();
         }
 
-        try {
-            $contents = (string) file_get_contents($fileName);
-        } catch (\Exception $e) {
-            throw new UnableToFetchException();
+        $contents = @file_get_contents($fileName);
+        if ($contents === false) {
+            $errorMessage = 'Unable to get the session file from the file-system. This may be a permission issue.';
+            throw new UnableToFetchException($errorMessage);
         }
 
-        $data = json_decode($contents);
+        $session = $this->parseSessionFile($contents);
 
-        if (json_last_error() !== JSON_ERROR_NONE || !isset($data->data)) {
-            throw new UnableToFetchException();
-        }
-
-        return $data->data;
+        return $session->data;
     }
 
     /**
@@ -197,21 +198,23 @@ class FileStorage implements StorageInterface
     /**
      * Remove this session from the storage.
      *
-     * @throws \PHPSess\Exception\SessionNotFoundException
-     * @throws \PHPSess\Exception\UnableToDeleteException
+     * @throws SessionNotFoundException
+     * @throws UnableToDeleteException
      * @param  string $sessionIdentifier The session identifier.
      * @return void
      */
     public function destroy(string $sessionIdentifier): void
     {
         if (!$this->sessionExists($sessionIdentifier)) {
-            throw new SessionNotFoundException();
+            $errorMessage = 'The session you are trying to destroy does not exist.';
+            throw new SessionNotFoundException($errorMessage);
         }
 
         $fileName = $this->getFileName($sessionIdentifier);
 
         if (!@unlink($fileName)) {
-            throw new UnableToDeleteException();
+            $errorMessage = 'The session file could not be deleted. This may be a permission issue.';
+            throw new UnableToDeleteException($errorMessage);
         }
 
         clearstatcache(true, $fileName);
@@ -220,7 +223,9 @@ class FileStorage implements StorageInterface
     /**
      * Removes the session older than the specified time from the storage.
      *
-     * @throws \PHPSess\Exception\UnableToDeleteException
+     * @throws UnableToDeleteException
+     * @throws UnableToFetchException
+     * @throws BadSessionContentException
      * @param  int $maxLife The maximum time (in microseconds) that a session file must be kept.
      * @return void
      */
@@ -229,7 +234,9 @@ class FileStorage implements StorageInterface
         $files = @scandir($this->filePath);
 
         if ($files === false) {
-            throw new UnableToDeleteException();
+            $errorMessage = 'Could not read the session path to determine the old session files. ' .
+                'This may be a permission issue.';
+            throw new UnableToFetchException($errorMessage);
         }
 
         $limitTime = microtime(true) - $maxLife / 1000000;
@@ -250,13 +257,16 @@ class FileStorage implements StorageInterface
         }
 
         if ($hasError) {
-            throw new UnableToDeleteException();
+            $errorMessage = 'Could not delete a session file. This is likely a permission issue.';
+            throw new UnableToDeleteException($errorMessage);
         }
     }
 
     /**
      * Checks whether a file should be removed by clearOld or not
      *
+     * @throws UnableToFetchException
+     * @throws BadSessionContentException
      * @param  string $fullPath  The absolute path to the file
      * @param  string $fileName  Only the name of the file
      * @param  string $prefix    The prefix of the session files
@@ -277,16 +287,14 @@ class FileStorage implements StorageInterface
 
         $contents = @file_get_contents($fullPath);
         if ($contents === false) {
-            throw new UnableToDeleteException();
+            $errorMessage = 'Could not read the session file content to determine if it should be cleared. ' .
+                'This is likely a permission issue';
+            throw new UnableToFetchException($errorMessage);
         }
 
-        $content = json_decode($contents);
+        $session = $this->parseSessionFile($contents);
 
-        if ($content->time > $limitTime) {
-            return false;
-        }
-
-        return true;
+        return $session->time <= $limitTime;
     }
 
     /**
@@ -298,5 +306,44 @@ class FileStorage implements StorageInterface
     private function getFileName(string $sessionIdentifier): string
     {
         return $this->filePath . '/' . $this->filePrefix . $sessionIdentifier;
+    }
+
+    /**
+     * Parses the session file content.
+     *
+     * @todo Create a separated class instead of using stdClass
+     * @throws BadSessionContentException
+     * @param string $fileContent
+     * @return stdClass
+     */
+    private function parseSessionFile(string $fileContent): stdClass
+    {
+        $content = json_decode($fileContent);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $errorMessage = 'Could not parse the session file as JSON.';
+            throw new BadSessionContentException($errorMessage);
+        }
+
+        if (!isset($content->time)) {
+            $errorMessage = 'The session file content has no "time" field.';
+            throw new BadSessionContentException($errorMessage);
+        }
+
+        if (!is_numeric($content->time)) {
+            $errorMessage = 'The "time" field of the session file is not a microsecond timestamp.';
+            throw new BadSessionContentException($errorMessage);
+        }
+
+        if (!isset($content->data)) {
+            $errorMessage = 'The session file content has no "data" field.';
+            throw new BadSessionContentException($errorMessage);
+        }
+
+        $session = new stdClass();
+        $session->data = (string) $content->data;
+        $session->time = (float) $content->time;
+
+        return $session;
     }
 }
