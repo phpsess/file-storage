@@ -290,6 +290,7 @@ final class FileStorageTest extends TestCase
 
     /**
      * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::getFilesInSessionPath
      * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
      */
     public function testClearOld()
@@ -359,6 +360,7 @@ final class FileStorageTest extends TestCase
 
     /**
      * @covers \PHPSess\Storage\FileStorage::clearOld
+     * @covers \PHPSess\Storage\FileStorage::getFilesInSessionPath
      * @covers \PHPSess\Storage\FileStorage::shouldBeCleared
      */
     public function testNoPermissionToClear()

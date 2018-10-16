@@ -240,13 +240,7 @@ class FileStorage implements StorageInterface
      */
     public function clearOld(int $maxLife): void
     {
-        $files = @scandir($this->filePath);
-
-        if ($files === false) {
-            $errorMessage = 'Could not read the session path to determine the old session files. ' .
-                'This may be a permission issue.';
-            throw new UnableToFetchException($errorMessage);
-        }
+        $files = $this->getFilesInSessionPath();
 
         $limitTime = microtime(true) - $maxLife / 1000000;
 
@@ -269,6 +263,23 @@ class FileStorage implements StorageInterface
             $errorMessage = 'Could not delete a session file. This is likely a permission issue.';
             throw new UnableToDeleteException($errorMessage);
         }
+    }
+
+    /**
+     * @throws UnableToFetchException
+     * @return iterable
+     */
+    private function getFilesInSessionPath(): iterable
+    {
+        $files = @scandir($this->filePath);
+
+        if ($files === false) {
+            $errorMessage = 'Could not read the session path to determine the old session files. ' .
+                'This may be a permission issue.';
+            throw new UnableToFetchException($errorMessage);
+        }
+
+        return $files;
     }
 
     /**
