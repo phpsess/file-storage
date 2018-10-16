@@ -48,7 +48,11 @@ class FileStorage implements StorageInterface
      */
     public function __construct(?string $path = null, string $filePrefix = 'ssess_')
     {
-        $path = $this->setUpSessionPath($path);
+        if (!$path) {
+            $path = (string) ini_get('session.save_path');
+        }
+
+        $this->setUpSessionPath($path);
 
         $this->filePath = $path;
         $this->filePrefix = $filePrefix;
@@ -56,15 +60,11 @@ class FileStorage implements StorageInterface
 
     /**
      * @throws UnableToSetupStorageException
-     * @param string|null $path
-     * @return string
+     * @param string $path
+     * @return void
      */
-    private function setUpSessionPath(?string $path): string
+    private function setUpSessionPath(string $path): void
     {
-        if (!$path) {
-            $path = ini_get('session.save_path');
-        }
-
         if (!$path) {
             $errorMessage = 'The session path could not be determined. Either pass it as the first ' .
                 'parameter to the Storage Driver constructor or define it in the ini setting session.save_path.';
@@ -85,8 +85,6 @@ class FileStorage implements StorageInterface
             $errorMessage = 'The session path is not writable. This is likely a permission issue.';
             throw new UnableToSetupStorageException($errorMessage);
         }
-
-        return $path;
     }
 
     /**
