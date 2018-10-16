@@ -14,7 +14,6 @@ use PHPSess\Exception\UnableToFetchException;
 use PHPSess\Exception\UnableToSaveException;
 use TH\Lock\FileLock;
 use Exception;
-use stdClass;
 
 /**
  * Uses the filesystem to store the session data.
@@ -44,38 +43,50 @@ class FileStorage implements StorageInterface
      * FileStorage constructor.
      *
      * @throws UnableToSetupStorageException
-     * @param  string|null $filePath   The absolute path to the session files directory. If not set, defaults to INI session.save_path.
-     * @param  string      $filePrefix The prefix used in the session file name.
+     * @param  string|null $path        The absolute path to the session files directory. If not set, defaults to INI session.save_path.
+     * @param  string      $filePrefix  The prefix used in the session file name.
      */
-    public function __construct(?string $filePath = null, string $filePrefix = 'ssess_')
+    public function __construct(?string $path = null, string $filePrefix = 'ssess_')
     {
-        if (!$filePath) {
-            $filePath = ini_get('session.save_path');
+        $path = $this->setUpSessionPath($path);
+
+        $this->filePath = $path;
+        $this->filePrefix = $filePrefix;
+    }
+
+    /**
+     * @throws UnableToSetupStorageException
+     * @param string|null $path
+     * @return string
+     */
+    private function setUpSessionPath(?string $path): string
+    {
+        if (!$path) {
+            $path = ini_get('session.save_path');
         }
 
-        if (!$filePath) {
+        if (!$path) {
             $errorMessage = 'The session path could not be determined. Either pass it as the first ' .
                 'parameter to the Storage Driver constructor or define it in the ini setting session.save_path.';
             throw new UnableToSetupStorageException($errorMessage);
         }
 
-        if (!file_exists($filePath) && !@mkdir($filePath, 0777)) {
+        if (!file_exists($path) && !@mkdir($path, 0777)) {
             $errorMessage = 'The session path does not exist and could not be created. This may be a permission issue.';
             throw new UnableToSetupStorageException($errorMessage);
         }
 
-        if (!is_readable($filePath)) {
+        if (!is_readable($path)) {
             $errorMessage = 'The session path is not readable. This is likely a permission issue.';
             throw new UnableToSetupStorageException($errorMessage);
         }
 
-        if (!is_writable($filePath)) {
+        if (!is_writable($path)) {
             $errorMessage = 'The session path is not writable. This is likely a permission issue.';
             throw new UnableToSetupStorageException($errorMessage);
         }
 
-        $this->filePath = $filePath;
-        $this->filePrefix = $filePrefix;
+        return $path;
     }
 
     /**

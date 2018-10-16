@@ -50,7 +50,7 @@ final class FileStorageTest extends TestCase
     }
 
     /**
-     * @covers \PHPSess\Storage\FileStorage::__construct
+     * @covers \PHPSess\Storage\FileStorage::setUpSessionPath
      */
     public function testUnwritableDirectory()
     {
@@ -64,7 +64,7 @@ final class FileStorageTest extends TestCase
     }
 
     /**
-     * @covers \PHPSess\Storage\FileStorage::__construct
+     * @covers \PHPSess\Storage\FileStorage::setUpSessionPath
      */
     public function testUnreadableDirectory()
     {
@@ -78,7 +78,7 @@ final class FileStorageTest extends TestCase
     }
 
     /**
-     * @covers \PHPSess\Storage\FileStorage::__construct
+     * @covers \PHPSess\Storage\FileStorage::setUpSessionPath
      */
     public function testCantFigureOutPath()
     {
@@ -90,7 +90,7 @@ final class FileStorageTest extends TestCase
     }
 
     /**
-     * @covers \PHPSess\Storage\FileStorage::__construct
+     * @covers \PHPSess\Storage\FileStorage::setUpSessionPath
      */
     public function testNoPermissionToCreatePath()
     {
@@ -109,6 +109,7 @@ final class FileStorageTest extends TestCase
 
     /**
      * @covers \PHPSess\Storage\FileStorage::__construct
+     * @covers \PHPSess\Storage\FileStorage::setUpSessionPath
      */
     public function testNoErrorThrownIncontroller()
     {
