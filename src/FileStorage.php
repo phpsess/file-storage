@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace PHPSess\Storage;
 
+use PHPSess\Interfaces\StorageInterface;
+use PHPSess\Storage\FileStorage\SessionContent;
 use PHPSess\Exception\BadSessionContentException;
 use PHPSess\Exception\UnableToSetupStorageException;
-use PHPSess\Interfaces\StorageInterface;
 use PHPSess\Exception\SessionNotFoundException;
 use PHPSess\Exception\UnableToDeleteException;
 use PHPSess\Exception\UnableToFetchException;
@@ -89,12 +90,10 @@ class FileStorage implements StorageInterface
     {
         $fileName = $this->getFileName($sessionIdentifier);
 
-        $contents = json_encode([
-            'data' => $sessionData,
-            'time' => microtime(true)
-        ]);
+        $contents = new SessionContent();
+        $contents->setData($sessionData);
 
-        if (@file_put_contents($fileName, $contents) === false) {
+        if (@file_put_contents($fileName, $contents->toString()) === false) {
             $errorMessage = 'Unable to save the session file to the file-system. This may be a permission issue.';
             throw new UnableToSaveException($errorMessage);
         }
@@ -123,9 +122,10 @@ class FileStorage implements StorageInterface
             throw new UnableToFetchException($errorMessage);
         }
 
-        $session = $this->parseSessionFile($contents);
+        $session = new SessionContent();
+        $session->parse($contents);
 
-        return $session->data;
+        return $session->getData();
     }
 
     /**
@@ -292,9 +292,10 @@ class FileStorage implements StorageInterface
             throw new UnableToFetchException($errorMessage);
         }
 
-        $session = $this->parseSessionFile($contents);
+        $session = new SessionContent();
+        $session->parse($contents);
 
-        return $session->time <= $limitTime;
+        return $session->getTime() <= $limitTime;
     }
 
     /**
@@ -306,44 +307,5 @@ class FileStorage implements StorageInterface
     private function getFileName(string $sessionIdentifier): string
     {
         return $this->filePath . '/' . $this->filePrefix . $sessionIdentifier;
-    }
-
-    /**
-     * Parses the session file content.
-     *
-     * @todo Create a separated class instead of using stdClass
-     * @throws BadSessionContentException
-     * @param string $fileContent
-     * @return stdClass
-     */
-    private function parseSessionFile(string $fileContent): stdClass
-    {
-        $content = json_decode($fileContent);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $errorMessage = 'Could not parse the session file as JSON.';
-            throw new BadSessionContentException($errorMessage);
-        }
-
-        if (!isset($content->time)) {
-            $errorMessage = 'The session file content has no "time" field.';
-            throw new BadSessionContentException($errorMessage);
-        }
-
-        if (!is_numeric($content->time)) {
-            $errorMessage = 'The "time" field of the session file is not a microsecond timestamp.';
-            throw new BadSessionContentException($errorMessage);
-        }
-
-        if (!isset($content->data)) {
-            $errorMessage = 'The session file content has no "data" field.';
-            throw new BadSessionContentException($errorMessage);
-        }
-
-        $session = new stdClass();
-        $session->data = (string) $content->data;
-        $session->time = (float) $content->time;
-
-        return $session;
     }
 }

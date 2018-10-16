@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace PHPSess\Tests;
 
-use PHPSess\Exception\BadSessionContentException;
 use PHPSess\Exception\UnableToFetchException;
 use PHPSess\Exception\UnableToSetupStorageException;
 use PHPSess\Storage\FileStorage;
@@ -144,90 +143,6 @@ final class FileStorageTest extends TestCase
     }
 
     /**
-     * @covers \PHPSess\Storage\FileStorage::get
-     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
-     */
-    public function testThrowErrorWhenTheFileIsNoJson()
-    {
-        $storage = new FileStorage('', 'ssess_');
-
-        $identifier = $this->getName();
-
-        $storage->save($identifier, 'data');
-
-        $session_path = session_save_path();
-
-        file_put_contents("$session_path/ssess_$identifier", '{corrupted: json"');
-
-        $this->expectException(BadSessionContentException::class);
-
-        $storage->get($identifier);
-    }
-
-    /**
-     * @covers \PHPSess\Storage\FileStorage::get
-     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
-     */
-    public function testThrowErrorWhenTheFileHasNoDataField()
-    {
-        $storage = new FileStorage('', 'ssess_');
-
-        $identifier = $this->getName();
-
-        $storage->save($identifier, 'data');
-
-        $session_path = session_save_path();
-
-        file_put_contents("$session_path/ssess_$identifier", '{"time": 1}');
-
-        $this->expectException(BadSessionContentException::class);
-
-        $storage->get($identifier);
-    }
-
-    /**
-     * @covers \PHPSess\Storage\FileStorage::get
-     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
-     */
-    public function testThrowErrorWhenTheFileHasNoTimeField()
-    {
-        $storage = new FileStorage('', 'ssess_');
-
-        $identifier = $this->getName();
-
-        $storage->save($identifier, 'data');
-
-        $session_path = session_save_path();
-
-        file_put_contents("$session_path/ssess_$identifier", '{"data": "test data"}');
-
-        $this->expectException(BadSessionContentException::class);
-
-        $storage->get($identifier);
-    }
-
-    /**
-     * @covers \PHPSess\Storage\FileStorage::get
-     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
-     */
-    public function testThrowErrorWhenTheFileHasTimeButIsNotMicrosecond()
-    {
-        $storage = new FileStorage('', 'ssess_');
-
-        $identifier = $this->getName();
-
-        $storage->save($identifier, 'data');
-
-        $session_path = session_save_path();
-
-        file_put_contents("$session_path/ssess_$identifier", '{"data": "test data", "time": "18:32:45"}');
-
-        $this->expectException(BadSessionContentException::class);
-
-        $storage->get($identifier);
-    }
-
-    /**
      * @covers \PHPSess\Storage\FileStorage::save
      */
     public function testUnableToSave()
@@ -280,7 +195,6 @@ final class FileStorageTest extends TestCase
     /**
      * @covers \PHPSess\Storage\FileStorage::save
      * @covers \PHPSess\Storage\FileStorage::get
-     * @covers \PHPSess\Storage\FileStorage::parseSessionFile
      */
     public function testSaveThenGet()
     {
