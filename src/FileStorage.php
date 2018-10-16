@@ -244,7 +244,7 @@ class FileStorage implements StorageInterface
 
         $limitTime = microtime(true) - $maxLife / 1000000;
 
-        $hasError = false;
+        $errors = [];
         foreach ($files as $file) {
             if (!$this->shouldBeCleared($file, $limitTime)) {
                 continue;
@@ -252,14 +252,14 @@ class FileStorage implements StorageInterface
 
             $fullPath = "$this->filePath/$file";
 
-            if (!@unlink($fullPath)) {
-                $hasError = true;
-            }
+            $errors[] = !@unlink($fullPath);
 
             clearstatcache(true, $fullPath);
         }
 
-        if ($hasError) {
+        $errors = array_filter($errors);
+
+        if ($errors) {
             $errorMessage = 'Could not delete a session file. This is likely a permission issue.';
             throw new UnableToDeleteException($errorMessage);
         }
