@@ -246,13 +246,13 @@ class FileStorage implements StorageInterface
 
         $hasError = false;
         foreach ($files as $file) {
-            $fullPath = "$this->filePath/$file";
-
-            if (!$this->shouldBeCleared($fullPath, $file, $this->filePrefix, $limitTime)) {
+            if (!$this->shouldBeCleared($file, $limitTime)) {
                 continue;
             }
 
-            if (!@unlink("$this->filePath/$file")) {
+            $fullPath = "$this->filePath/$file";
+
+            if (!@unlink($fullPath)) {
                 $hasError = true;
             }
 
@@ -287,17 +287,17 @@ class FileStorage implements StorageInterface
      *
      * @throws UnableToFetchException
      * @throws BadSessionContentException
-     * @param  string $fullPath  The absolute path to the file
      * @param  string $fileName  Only the name of the file
-     * @param  string $prefix    The prefix of the session files
      * @param  float  $limitTime The maximum timestamp (in microseconds) a file can be kept
      * @return bool If the file should be cleared or not
      */
-    private function shouldBeCleared(string $fullPath, string $fileName, string $prefix, float $limitTime): bool
+    private function shouldBeCleared(string $fileName, float $limitTime): bool
     {
-        if (strpos($fileName, $prefix) !== 0) {
+        if (strpos($fileName, $this->filePrefix) !== 0) {
             return false;
         }
+
+        $fullPath = "$this->filePath/$fileName";
 
         clearstatcache(true, $fullPath);
 
